@@ -14,6 +14,8 @@ export default function ProfilePage() {
   const [favorites, setFavorites] = useState<Recipe[] | null>(null);
   const [myRecipes, setMyRecipes] = useState<Recipe[] | null>(null);
   const [editing, setEditing] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
+  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "" });
   const [form, setForm] = useState({
     displayName: user?.displayName ?? "",
     firstName: user?.firstName ?? "",
@@ -102,12 +104,20 @@ export default function ProfilePage() {
             Manage your account and activity.
           </p>
         </div>
-        <button
-          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          onClick={() => setEditing(true)}
-        >
-          Edit profile
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            onClick={() => setEditing(true)}
+          >
+            Edit profile
+          </button>
+          <button
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            onClick={() => setChangingPw(true)}
+          >
+            Change password
+          </button>
+        </div>
       </header>
 
       {/* Profile card */}
@@ -234,6 +244,31 @@ export default function ProfilePage() {
           }
         }}
       />
+      <ChangePasswordModal
+        open={changingPw}
+        onClose={() => {
+          setChangingPw(false);
+          setPwForm({ currentPassword: "", newPassword: "" });
+        }}
+        form={pwForm}
+        setForm={setPwForm}
+        onSave={async () => {
+          try {
+            if (!pwForm.currentPassword || !pwForm.newPassword) {
+              toast.error("Please fill out both fields");
+              return;
+            }
+            await usersApi.changePassword(pwForm);
+            toast.success("Password updated");
+            setChangingPw(false);
+            setPwForm({ currentPassword: "", newPassword: "" });
+          } catch (e: unknown) {
+            const err = e as { response?: { data?: unknown } };
+            const msg = err?.response?.data ?? "Failed to update password";
+            toast.error(typeof msg === "string" ? msg : "Failed to update password");
+          }
+        }}
+      />
     </div>
   );
 }
@@ -326,6 +361,72 @@ function EditProfileModal({
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+function ChangePasswordModal({
+  open,
+  onClose,
+  form,
+  setForm,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  form: { currentPassword: string; newPassword: string };
+  setForm: React.Dispatch<
+    React.SetStateAction<{ currentPassword: string; newPassword: string }>
+  >;
+  onSave: () => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Change password"
+      description="Update your account password."
+      footer={
+        <>
+          <button
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white"
+            onClick={onSave}
+          >
+            Update password
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <label className="grid gap-1 text-sm">
+          <span className="text-gray-700">Current password</span>
+          <input
+            type="password"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+            value={form.currentPassword}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, currentPassword: e.target.value }))
+            }
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-gray-700">New password</span>
+          <input
+            type="password"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+            value={form.newPassword}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, newPassword: e.target.value }))
+            }
           />
         </label>
       </div>

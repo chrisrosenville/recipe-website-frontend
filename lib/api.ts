@@ -14,6 +14,7 @@ import {
   CreateRecipeDto,
   LoginDto,
   RegisterDto,
+  ChangePasswordDto,
 } from "@/types/dto";
 
 const api = axios.create({
@@ -66,6 +67,8 @@ export const users = {
       email: string;
     }>
   ) => api.put(`/user/me`, data),
+  changePassword: (data: ChangePasswordDto) =>
+    api.post<{ message: string }>(`/user/me/password`, data),
   // Admin
   search: (q?: string, page = 1, pageSize = 20) =>
     api.get<PagedResult<AdminUser>>(`/user`, { params: { q, page, pageSize } }),

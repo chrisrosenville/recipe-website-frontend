@@ -13,6 +13,12 @@ export interface LoginDto {
   password: string;
 }
 
+// --- Change Password ---
+export interface ChangePasswordDto {
+  currentPassword: string;
+  newPassword: string;
+}
+
 // --- Create Recipe ---
 export interface CreateRecipeDto {
   name: string;
