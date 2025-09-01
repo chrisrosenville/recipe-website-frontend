@@ -32,7 +32,8 @@ export const auth = {
 
 // Recipe endpoints
 export const recipes = {
-  getAll: () => api.get<Recipe[]>("/recipe"),
+  getAll: (page = 1, pageSize = 12) =>
+    api.get<PagedResult<Recipe>>("/recipe", { params: { page, pageSize } }),
   getById: (id: number) => api.get<Recipe>(`/recipe/${id}`),
   getFavoriteInfo: (id: number) =>
     api.get<{ count: number; isFavorited: boolean }>(`/recipe/${id}/favorite`),
@@ -56,7 +57,10 @@ export const categories = {
 
 // User endpoints
 export const users = {
-  getRecipes: (userId: number) => api.get<Recipe[]>(`/user/${userId}/recipes`),
+  getRecipes: (userId: number, page = 1, pageSize = 20) =>
+    api.get<PagedResult<Recipe>>(`/user/${userId}/recipes`, {
+      params: { page, pageSize },
+    }),
   getFavorites: (userId: number) =>
     api.get<Recipe[]>(`/user/${userId}/favorites`),
   updateMe: (

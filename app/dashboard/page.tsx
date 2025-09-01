@@ -17,11 +17,11 @@ export default function DashboardHome() {
       try {
         const [favRes, myRes] = await Promise.all([
           usersApi.getFavorites(user.id),
-          usersApi.getRecipes(user.id),
+          usersApi.getRecipes(user.id, 1, 1), // Just get 1 recipe to get the total count
         ]);
         if (!active) return;
         setFavCount(favRes.data.length);
-        setMyCount(myRes.data.length);
+        setMyCount(myRes.data.total); // Use total from paginated response
       } catch {
         if (!active) return;
         setFavCount(0);

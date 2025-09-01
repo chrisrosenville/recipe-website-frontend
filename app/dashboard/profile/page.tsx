@@ -15,7 +15,10 @@ export default function ProfilePage() {
   const [myRecipes, setMyRecipes] = useState<Recipe[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
-  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "" });
+  const [pwForm, setPwForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+  });
   const [form, setForm] = useState({
     displayName: user?.displayName ?? "",
     firstName: user?.firstName ?? "",
@@ -39,11 +42,11 @@ export default function ProfilePage() {
       try {
         const [favRes, myRes] = await Promise.all([
           usersApi.getFavorites(user.id),
-          usersApi.getRecipes(user.id),
+          usersApi.getRecipes(user.id, 1, 50), // Get first 50 recipes for display
         ]);
         if (!active) return;
         setFavorites(favRes.data);
-        setMyRecipes(myRes.data);
+        setMyRecipes(myRes.data.items); // Extract items from paginated response
       } catch {
         if (!active) return;
         setFavorites([]);
@@ -265,7 +268,9 @@ export default function ProfilePage() {
           } catch (e: unknown) {
             const err = e as { response?: { data?: unknown } };
             const msg = err?.response?.data ?? "Failed to update password";
-            toast.error(typeof msg === "string" ? msg : "Failed to update password");
+            toast.error(
+              typeof msg === "string" ? msg : "Failed to update password"
+            );
           }
         }}
       />

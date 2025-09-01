@@ -1,47 +1,72 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { categories as categoriesApi, recipes as recipesApi } from "@/lib/api";
-import type { Category, Recipe } from "@/types/api";
+import type { Category, Recipe, PagedResult } from "@/types/api";
 import RecipeGrid from "@/components/RecipeGrid";
 import Header from "@/components/Header";
+import Pagination from "@/components/ui/Pagination";
 
 export default function RecipesPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const qParam = searchParams.get("q")?.trim() || "";
+  const pageParam = parseInt(searchParams.get("page") || "1");
 
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipesData, setRecipesData] = useState<PagedResult<Recipe> | null>(
+    null
+  );
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState(qParam);
   const [activeCat, setActiveCat] = useState<number | "all">("all");
+  const [currentPage, setCurrentPage] = useState(pageParam);
 
   useEffect(() => {
     setQuery(qParam);
-  }, [qParam]);
+    setCurrentPage(pageParam);
+  }, [qParam, pageParam]);
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([recipesApi.getAll(), categoriesApi.getAll()]).then(
-      ([r, c]) => {
+    setLoading(true);
+
+    Promise.all([recipesApi.getAll(currentPage, 12), categoriesApi.getAll()])
+      .then(([r, c]) => {
         if (!mounted) return;
-        setRecipes(r.data);
+        setRecipesData(r.data);
         setCategories(c.data);
         setLoading(false);
-      }
-    );
+      })
+      .catch(() => {
+        if (mounted) {
+          setLoading(false);
+        }
+      });
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [currentPage]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    const params = new URLSearchParams(searchParams);
+    params.set("page", page.toString());
+    router.push(`/recipes?${params.toString()}`);
+  };
 
   const filtered = useMemo(() => {
+    if (!recipesData?.items) return [];
+
     const byCat =
       activeCat === "all"
-        ? recipes
-        : recipes.filter((r) => r.categoryId === activeCat);
+        ? recipesData.items
+        : recipesData.items.filter((r) => r.categoryId === activeCat);
+
     if (!query) return byCat;
+
     const q = query.toLowerCase();
     return byCat.filter((r) =>
       [r.name, r.description, ...(r.tags || []), ...(r.ingredients || [])]
@@ -49,7 +74,11 @@ export default function RecipesPage() {
         .toLowerCase()
         .includes(q)
     );
-  }, [recipes, query, activeCat]);
+  }, [recipesData?.items, query, activeCat]);
+
+  const totalPages = recipesData
+    ? Math.ceil(recipesData.total / recipesData.pageSize)
+    : 0;
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -113,13 +142,35 @@ export default function RecipesPage() {
           </div>
         </div>
 
+        {/* Results count */}
+        {recipesData && (
+          <div className="mb-4 text-sm text-gray-600">
+            Showing {(currentPage - 1) * 12 + 1} to{" "}
+            {Math.min(currentPage * 12, recipesData.total)} of{" "}
+            {recipesData.total} recipes
+          </div>
+        )}
+
         {/* Results */}
         {loading ? (
           <div className="text-center text-gray-500 py-12">
             Loading recipes…
           </div>
         ) : (
-          <RecipeGrid recipes={filtered} />
+          <>
+            <RecipeGrid recipes={filtered} />
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-8">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

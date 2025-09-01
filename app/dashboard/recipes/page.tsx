@@ -4,19 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 import { users as usersApi, recipes as recipesApi } from "@/lib/api";
-import type { Recipe } from "@/types/api";
+import type { Recipe, PagedResult } from "@/types/api";
 import { RecipeStatus } from "@/types/api";
 import { toast } from "react-toastify";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Pagination from "@/components/ui/Pagination";
 
 export default function UserRecipesPage() {
   const user = useAuthStore((s) => s.user);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipesData, setRecipesData] = useState<PagedResult<Recipe> | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<"all" | RecipeStatus>("all");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const hasRole = (target: "admin" | "author" | "user") => {
     const roles = user?.roles ?? [];
@@ -30,11 +34,13 @@ export default function UserRecipesPage() {
   useEffect(() => {
     let mounted = true;
     if (!user) return;
+    setLoading(true);
+
     usersApi
-      .getRecipes(user.id)
+      .getRecipes(user.id, currentPage, 20)
       .then((res) => {
         if (!mounted) return;
-        setRecipes(res.data);
+        setRecipesData(res.data);
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -42,12 +48,21 @@ export default function UserRecipesPage() {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [user, currentPage]);
 
   const updateLocal = (id: number, patch: Partial<Recipe>) => {
-    setRecipes((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
-    );
+    if (recipesData) {
+      setRecipesData((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.map((r) =>
+                r.id === id ? { ...r, ...patch } : r
+              ),
+            }
+          : null
+      );
+    }
   };
 
   const handleSubmitForReview = async (r: Recipe) => {
@@ -77,17 +92,27 @@ export default function UserRecipesPage() {
   };
 
   const filteredSorted = useMemo(() => {
+    if (!recipesData?.items) return [];
+
     const filtered =
       status === "all"
-        ? recipes
-        : recipes.filter((r) => r.currentStatus === status);
+        ? recipesData.items
+        : recipesData.items.filter((r) => r.currentStatus === status);
     const sorted = [...filtered].sort((a, b) => {
       const dA = new Date(a.createdAt).getTime();
       const dB = new Date(b.createdAt).getTime();
       return sort === "newest" ? dB - dA : dA - dB;
     });
     return sorted;
-  }, [recipes, status, sort]);
+  }, [recipesData?.items, status, sort]);
+
+  const totalPages = recipesData
+    ? Math.ceil(recipesData.total / recipesData.pageSize)
+    : 0;
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   return (
     <div className="space-y-6">
@@ -157,83 +182,106 @@ export default function UserRecipesPage() {
         </div>
       </div>
 
+      {/* Results count */}
+      {recipesData && (
+        <div className="text-sm text-gray-600">
+          Showing {(currentPage - 1) * 20 + 1} to{" "}
+          {Math.min(currentPage * 20, recipesData.total)} of {recipesData.total}{" "}
+          recipes
+        </div>
+      )}
+
       {loading ? (
         <div className="text-gray-500">Loading…</div>
-      ) : recipes.length === 0 ? (
+      ) : recipesData?.total === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-700">
-          You haven’t added any recipes yet. Start by creating one.
+          You haven&apos;t added any recipes yet. Start by creating one.
         </div>
       ) : (
-        <ul className="divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white">
-          {filteredSorted.map((r) => (
-            <li
-              key={r.id}
-              className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900 truncate">
-                    {r.name}
-                  </h3>
-                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-800">
-                    {r.currentStatus}
-                  </span>
+        <>
+          <ul className="divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white">
+            {filteredSorted.map((r) => (
+              <li
+                key={r.id}
+                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-900 truncate">
+                      {r.name}
+                    </h3>
+                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-800">
+                      {r.currentStatus}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 line-clamp-2">
+                    {r.description}
+                  </p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Created {new Date(r.createdAt).toLocaleDateString()}
+                  </p>
+                  <div className="mt-1 text-xs text-gray-500">
+                    In {r.category?.name} • {r.cookingTimeMinutes} min
+                  </div>
                 </div>
-                <p className="text-sm text-gray-600 line-clamp-2">
-                  {r.description}
-                </p>
-                <p className="text-gray-500 text-sm mt-1">
-                  Created {new Date(r.createdAt).toLocaleDateString()}
-                </p>
-                <div className="mt-1 text-xs text-gray-500">
-                  In {r.category?.name} • {r.cookingTimeMinutes} min
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:justify-end">
-                <Link
-                  href={`/recipes/${r.id}`}
-                  className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                >
-                  View
-                </Link>
-                <Link
-                  href={`/dashboard/recipes/${r.id}/edit`}
-                  className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                >
-                  Edit
-                </Link>
-                {canAuthorActions && r.currentStatus === RecipeStatus.Draft && (
-                  <button
-                    onClick={() => handleSubmitForReview(r)}
-                    disabled={busyId === r.id}
-                    className="px-3 py-2 text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                <div className="flex items-center gap-2 sm:justify-end">
+                  <Link
+                    href={`/recipes/${r.id}`}
+                    className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                   >
-                    Submit for review
-                  </button>
-                )}
-                {canAuthorActions &&
-                  r.currentStatus === RecipeStatus.Pending && (
+                    View
+                  </Link>
+                  <Link
+                    href={`/dashboard/recipes/${r.id}/edit`}
+                    className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                  >
+                    Edit
+                  </Link>
+                  {canAuthorActions &&
+                    r.currentStatus === RecipeStatus.Draft && (
+                      <button
+                        onClick={() => handleSubmitForReview(r)}
+                        disabled={busyId === r.id}
+                        className="px-3 py-2 text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        Submit for review
+                      </button>
+                    )}
+                  {canAuthorActions &&
+                    r.currentStatus === RecipeStatus.Pending && (
+                      <button
+                        onClick={() => handleRevertToDraft(r)}
+                        disabled={busyId === r.id}
+                        className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Revert to draft
+                      </button>
+                    )}
+                  {canAuthorActions && (
                     <button
-                      onClick={() => handleRevertToDraft(r)}
+                      onClick={() => handleDelete(r)}
                       disabled={busyId === r.id}
-                      className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      className="px-3 py-2 text-sm rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
                     >
-                      Revert to draft
+                      Delete
                     </button>
                   )}
-                {canAuthorActions && (
-                  <button
-                    onClick={() => handleDelete(r)}
-                    disabled={busyId === r.id}
-                    className="px-3 py-2 text-sm rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-6">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {/* Delete confirmation */}
@@ -241,7 +289,9 @@ export default function UserRecipesPage() {
         open={pendingDeleteId !== null}
         title="Delete recipe"
         description={(() => {
-          const recipe = recipes.find((x) => x.id === pendingDeleteId);
+          const recipe = recipesData?.items.find(
+            (x) => x.id === pendingDeleteId
+          );
           return recipe
             ? `Are you sure you want to delete "${recipe.name}"? This action cannot be undone.`
             : undefined;
@@ -256,7 +306,17 @@ export default function UserRecipesPage() {
           setBusyId(id);
           try {
             await recipesApi.delete(id);
-            setRecipes((prev) => prev.filter((x) => x.id !== id));
+            if (recipesData) {
+              setRecipesData((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      items: prev.items.filter((x) => x.id !== id),
+                      total: prev.total - 1,
+                    }
+                  : null
+              );
+            }
             toast.success("Recipe deleted");
           } finally {
             setBusyId(null);
