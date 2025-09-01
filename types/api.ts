@@ -51,6 +51,7 @@ export interface Recipe {
   cookingTimeHours: number;
   cookingTimeMinutes: number;
   favoritesCount: number;
+  isFavorited?: boolean; // Optional property for current user's favorite status
   createdAt: string;
   updatedAt: string;
 }

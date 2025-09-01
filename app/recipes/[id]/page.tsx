@@ -1,39 +1,64 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useRecipe } from "@/lib/hooks";
 import Header from "@/components/Header";
-import type { Recipe } from "@/types/api";
-import { RecipeStatus } from "@/types/api";
 import EditLinkIfOwner from "../../../components/recipes/EditLinkIfOwner";
-import type { Metadata } from "next";
 import { Calendar, Clock, Tag as TagIcon, ChefHat } from "lucide-react";
 import FavoriteButton from "@/components/recipes/FavoriteButton";
 
-async function getRecipe(id: number) {
-  const base =
-    process.env.NEXT_INTERNAL_API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8080/api";
-  try {
-    const res = await fetch(`${base}/recipe/${id}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    const data = (await res.json()) as Recipe;
-    return data;
-  } catch {
-    return null;
-  }
-}
+export default function RecipeDetailPage() {
+  const params = useParams();
+  const id = Number(params.id);
 
-export default async function RecipeDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const numId = Number(id);
-  if (!numId) return notFound();
-  const recipe = await getRecipe(numId);
-  if (!recipe) return notFound();
+  const { data: recipe, isLoading, error } = useRecipe(id);
+
+  if (isLoading) {
+    return (
+      <div>
+        <Header />
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-24">
+          <div className="text-center text-gray-500 py-12">
+            Loading recipe...
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error || !recipe) {
+    return (
+      <div>
+        <Header />
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-24">
+          <div className="text-center text-red-600 py-12">
+            Recipe not found or error loading recipe.
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Ensure recipe has all required properties
+  const {
+    id: recipeId,
+    name,
+    description,
+    image,
+    category,
+    user,
+    ingredients = [],
+    instructions = [],
+    tags = [],
+    cookingTimeHours = 0,
+    cookingTimeMinutes = 0,
+    favoritesCount = 0,
+    createdAt,
+    updatedAt,
+    userId: recipeUserId,
+  } = recipe;
 
   return (
     <div>
@@ -51,14 +76,12 @@ export default async function RecipeDetailPage({
           </ol>
         </nav>
 
-        {/* status banner removed per request */}
-
         <article className="space-y-5">
           <div className="rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm">
             <div className="relative w-full h-64 sm:h-80">
               <Image
-                src={recipe.image || "/recipe-placeholder.png"}
-                alt={recipe.name}
+                src={image || "/recipe-placeholder.png"}
+                alt={name}
                 fill
                 className="object-cover"
                 sizes="(max-width: 768px) 100vw, 800px"
@@ -66,43 +89,43 @@ export default async function RecipeDetailPage({
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
               <div className="absolute top-3 right-3">
                 <FavoriteButton
-                  recipeId={recipe.id}
-                  initialCount={recipe.favoritesCount ?? 0}
+                  recipeId={recipeId}
+                  initialCount={favoritesCount}
                 />
               </div>
             </div>
             <div className="p-5 sm:p-6">
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-800">
-                  {recipe.category?.name}
+                  {category?.name || "Uncategorized"}
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900">
-                {recipe.name}
+                {name}
               </h1>
-              <p className="text-gray-700 mt-2">{recipe.description}</p>
+              <p className="text-gray-700 mt-2">{description}</p>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
                 <span className="inline-flex items-center gap-1.5">
                   <ChefHat size={16} />
-                  {recipe.user?.displayName ||
-                    `${recipe.user?.firstName} ${recipe.user?.lastName}`}
+                  {user?.displayName ||
+                    `${user?.firstName || ""} ${user?.lastName || ""}`.trim() ||
+                    "Unknown User"}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Calendar size={16} />
-                  {new Date(recipe.createdAt).toLocaleDateString()}
+                  {createdAt
+                    ? new Date(createdAt).toLocaleDateString()
+                    : "Unknown date"}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Clock size={16} />
-                  {recipe.cookingTimeHours
-                    ? `${recipe.cookingTimeHours}h `
-                    : ""}
-                  {recipe.cookingTimeMinutes}m
+                  {cookingTimeHours > 0 ? `${cookingTimeHours}h ` : ""}
+                  {cookingTimeMinutes}m
                 </span>
-                {/* Favorites are shown in the image overlay via FavoriteButton */}
               </div>
-              {recipe.tags?.length ? (
+              {tags && tags.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {recipe.tags.map((t, i) => (
+                  {tags.map((t, i) => (
                     <span
                       key={`${t}-${i}`}
                       className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-800"
@@ -114,8 +137,8 @@ export default async function RecipeDetailPage({
               ) : null}
               <div className="mt-3">
                 <EditLinkIfOwner
-                  recipeUserId={recipe.userId}
-                  recipeId={recipe.id}
+                  recipeUserId={recipeUserId}
+                  recipeId={recipeId}
                 />
               </div>
             </div>
@@ -132,7 +155,7 @@ export default async function RecipeDetailPage({
                       <ChefHat size={16} /> Category
                     </span>
                     <span className="text-gray-900">
-                      {recipe.category?.name}
+                      {category?.name || "Uncategorized"}
                     </span>
                   </li>
 
@@ -141,10 +164,8 @@ export default async function RecipeDetailPage({
                       <Clock size={16} /> Cook time
                     </span>
                     <span className="text-gray-900">
-                      {recipe.cookingTimeHours
-                        ? `${recipe.cookingTimeHours}h `
-                        : ""}
-                      {recipe.cookingTimeMinutes}m
+                      {cookingTimeHours > 0 ? `${cookingTimeHours}h ` : ""}
+                      {cookingTimeMinutes}m
                     </span>
                   </li>
 
@@ -153,7 +174,9 @@ export default async function RecipeDetailPage({
                       <Calendar size={16} /> Created
                     </span>
                     <span className="text-gray-900">
-                      {new Date(recipe.createdAt).toLocaleDateString()}
+                      {createdAt
+                        ? new Date(createdAt).toLocaleDateString()
+                        : "Unknown date"}
                     </span>
                   </li>
                   <li className="flex items-center justify-between gap-3">
@@ -161,7 +184,9 @@ export default async function RecipeDetailPage({
                       <Calendar size={16} /> Updated
                     </span>
                     <span className="text-gray-900">
-                      {new Date(recipe.updatedAt).toLocaleDateString()}
+                      {updatedAt
+                        ? new Date(updatedAt).toLocaleDateString()
+                        : "Unknown date"}
                     </span>
                   </li>
                 </ul>
@@ -172,8 +197,8 @@ export default async function RecipeDetailPage({
                   Ingredients
                 </h2>
                 <ul className="mt-2 list-disc list-inside text-gray-800 space-y-1 marker:text-gray-400">
-                  {recipe.ingredients?.length ? (
-                    recipe.ingredients.map((ing, i) => <li key={i}>{ing}</li>)
+                  {ingredients && ingredients.length > 0 ? (
+                    ingredients.map((ing, i) => <li key={i}>{ing}</li>)
                   ) : (
                     <li>No ingredients listed.</li>
                   )}
@@ -187,8 +212,8 @@ export default async function RecipeDetailPage({
                 Instructions
               </h2>
               <ol className="mt-2 list-decimal list-inside text-gray-800 space-y-1.5">
-                {recipe.instructions?.length ? (
-                  recipe.instructions.map((step, i) => <li key={i}>{step}</li>)
+                {instructions && instructions.length > 0 ? (
+                  instructions.map((step, i) => <li key={i}>{step}</li>)
                 ) : (
                   <li>No instructions provided.</li>
                 )}
@@ -199,19 +224,4 @@ export default async function RecipeDetailPage({
       </main>
     </div>
   );
-}
-
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}): Promise<Metadata> {
-  const { id } = await params;
-  const recipe = await getRecipe(Number(id));
-  const title = recipe ? `${recipe.name} – Recipe Hub` : "Recipe – Recipe Hub";
-  const description = recipe?.description?.slice(0, 160);
-  return {
-    title,
-    description,
-  };
 }

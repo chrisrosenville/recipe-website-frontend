@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { categories as categoriesApi, recipes as recipesApi } from "@/lib/api";
-import type { Category, Recipe, PagedResult } from "@/types/api";
+import { useRecipes, useCategories } from "@/lib/hooks";
 import RecipeGrid from "@/components/RecipeGrid";
 import Header from "@/components/Header";
 import Pagination from "@/components/ui/Pagination";
@@ -14,41 +13,27 @@ export default function RecipesPage() {
   const qParam = searchParams.get("q")?.trim() || "";
   const pageParam = parseInt(searchParams.get("page") || "1");
 
-  const [recipesData, setRecipesData] = useState<PagedResult<Recipe> | null>(
-    null
-  );
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState(qParam);
   const [activeCat, setActiveCat] = useState<number | "all">("all");
   const [currentPage, setCurrentPage] = useState(pageParam);
 
+  // Use TanStack Query hooks for data fetching
+  const {
+    data: recipesData,
+    isLoading: recipesLoading,
+    error: recipesError,
+  } = useRecipes(currentPage, 12);
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useCategories();
+
+  // Update state when URL params change
   useEffect(() => {
     setQuery(qParam);
     setCurrentPage(pageParam);
   }, [qParam, pageParam]);
-
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-
-    Promise.all([recipesApi.getAll(currentPage, 12), categoriesApi.getAll()])
-      .then(([r, c]) => {
-        if (!mounted) return;
-        setRecipesData(r.data);
-        setCategories(c.data);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [currentPage]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -79,6 +64,22 @@ export default function RecipesPage() {
   const totalPages = recipesData
     ? Math.ceil(recipesData.total / recipesData.pageSize)
     : 0;
+
+  const isLoading = recipesLoading || categoriesLoading;
+  const hasError = recipesError || categoriesError;
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col">
+        <Header />
+        <div className="mx-auto max-w-6xl px-4 pt-28 sm:pt-32 pb-16 w-full">
+          <div className="text-center text-red-600 py-12">
+            Error loading recipes. Please try again later.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -125,7 +126,7 @@ export default function RecipesPage() {
             >
               All
             </button>
-            {categories.map((c) => (
+            {categoriesData?.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveCat(c.id)}
@@ -152,7 +153,7 @@ export default function RecipesPage() {
         )}
 
         {/* Results */}
-        {loading ? (
+        {isLoading ? (
           <div className="text-center text-gray-500 py-12">
             Loading recipes…
           </div>
